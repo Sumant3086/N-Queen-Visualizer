@@ -13,7 +13,8 @@ public class NQueensVisualizer extends JFrame {
     private boolean solving;
     private JButton startStopButton;
     private JButton nextSolutionButton;
-    private int solutionCount;
+    private JLabel solutionCounterLabel;
+    private int currentSolutionIndex;
     private List<int[][]> solutions;
 
     public NQueensVisualizer() {
@@ -28,7 +29,7 @@ public class NQueensVisualizer extends JFrame {
         board = new int[size][size];
         solutions = new ArrayList<>();
         solving = false;
-        solutionCount = 0;
+        currentSolutionIndex = 0;
 
         JPanel gridPanel = new JPanel();
         gridPanel.setLayout(new GridLayout(size, size));
@@ -47,24 +48,19 @@ public class NQueensVisualizer extends JFrame {
         add(gridPanel, BorderLayout.CENTER);
 
         JPanel buttonPanel = new JPanel();
-        buttonPanel.setLayout(new GridLayout(1, 2));
+        buttonPanel.setLayout(new GridLayout(1, 3));
 
-        startStopButton = new JButton("Start");
+        startStopButton = new JButton("Find All Solutions");
         startStopButton.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
                 if (solving) {
                     solving = false;
-                    startStopButton.setText("Start");
+                    startStopButton.setText("Find All Solutions");
                 } else {
                     solving = true;
                     startStopButton.setText("Stop");
-                    new Thread(new Runnable() {
-                        @Override
-                        public void run() {
-                            solvePuzzle();
-                        }
-                    }).start();
+                    new Thread(() -> solvePuzzle()).start();
                 }
             }
         });
@@ -72,21 +68,18 @@ public class NQueensVisualizer extends JFrame {
 
         nextSolutionButton = new JButton("Next Solution");
         nextSolutionButton.setEnabled(false);
-        nextSolutionButton.addActionListener(new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                solving = true;
-                new Thread(new Runnable() {
-                    @Override
-                    public void run() {
-                        clearBoard();
-                        solutionCount++;
-                        solvePuzzle();
-                    }
-                }).start();
+        nextSolutionButton.addActionListener(e -> {
+            if (!solutions.isEmpty()) {
+                currentSolutionIndex = (currentSolutionIndex + 1) % solutions.size();
+                showSolution(solutions.get(currentSolutionIndex));
+                solutionCounterLabel.setText("Solution #" + (currentSolutionIndex + 1) + " / " + solutions.size());
             }
         });
         buttonPanel.add(nextSolutionButton);
+
+        solutionCounterLabel = new JLabel("Solutions Found: 0");
+        solutionCounterLabel.setHorizontalAlignment(SwingConstants.CENTER);
+        buttonPanel.add(solutionCounterLabel);
 
         add(buttonPanel, BorderLayout.SOUTH);
 
@@ -104,141 +97,103 @@ public class NQueensVisualizer extends JFrame {
     }
 
     private void solvePuzzle() {
-        if (findSolution()) {
-            SwingUtilities.invokeLater(new Runnable() {
-                @Override
-                public void run() {
-                    JOptionPane.showMessageDialog(NQueensVisualizer.this, "N-Queens Solved! Solution #" + solutionCount, "Success", JOptionPane.INFORMATION_MESSAGE);
-                    nextSolutionButton.setEnabled(true);
-                }
-            });
-        } else {
-            SwingUtilities.invokeLater(new Runnable() {
-                @Override
-                public void run() {
-                    JOptionPane.showMessageDialog(NQueensVisualizer.this, "No more solutions exist for the given N-Queens board.", "Error", JOptionPane.ERROR_MESSAGE);
-                    nextSolutionButton.setEnabled(false);
-                }
-            });
-        }
+        solutions.clear();
+        currentSolutionIndex = 0;
+        clearBoard();
+        solveNQueensAll(0);
+
         solving = false;
-        SwingUtilities.invokeLater(new Runnable() {
-            @Override
-            public void run() {
-                startStopButton.setText("Start");
+        SwingUtilities.invokeLater(() -> {
+            startStopButton.setText("Find All Solutions");
+            nextSolutionButton.setEnabled(!solutions.isEmpty());
+            solutionCounterLabel.setText("Solutions Found: " + solutions.size());
+            if (!solutions.isEmpty()) {
+                showSolution(solutions.get(0));
+                JOptionPane.showMessageDialog(this, "Found " + solutions.size() + " solutions for N = " + size,
+                        "Complete", JOptionPane.INFORMATION_MESSAGE);
+            } else {
+                JOptionPane.showMessageDialog(this, "No solutions found for N = " + size,
+                        "No Solution", JOptionPane.ERROR_MESSAGE);
             }
         });
     }
 
-    private boolean findSolution() {
-        return solveNQueens(0);
-    }
+    private void solveNQueensAll(int col) {
+        if (col == size) {
+            int[][] solution = new int[size][size];
+            for (int i = 0; i < size; i++) {
+                System.arraycopy(board[i], 0, solution[i], 0, size);
+            }
+            solutions.add(solution);
+            return;
+        }
 
-    private void clearBoard() {
-        for (int row = 0; row < size; row++) {
-            for (int col = 0; col < size; col++) {
-                cells[row][col].setText("");
-                cells[row][col].setBackground((row + col) % 2 == 0 ? Color.WHITE : Color.BLACK);
-                cells[row][col].setForeground((row + col) % 2 == 0 ? Color.BLACK : Color.WHITE);
-                board[row][col] = 0;
+        for (int i = 0; i < size; i++) {
+            if (!solving) return;
+
+            if (isSafe(i, col)) {
+                board[i][col] = 1;
+                updateGUI(i, col, true);
+                delay(delay);
+
+                solveNQueensAll(col + 1);
+
+                board[i][col] = 0;
+                updateGUI(i, col, false);
+                delay(delay);
             }
         }
     }
 
     private boolean isSafe(int row, int col) {
-        for (int i = 0; i < col; i++) {
-            if (board[row][i] == 1) {
+        for (int i = 0; i < col; i++)
+            if (board[row][i] == 1)
                 return false;
-            }
-        }
 
-        for (int i = row, j = col; i >= 0 && j >= 0; i--, j--) {
-            if (board[i][j] == 1) {
+        for (int i = row, j = col; i >= 0 && j >= 0; i--, j--)
+            if (board[i][j] == 1)
                 return false;
-            }
-        }
 
-        for (int i = row, j = col; j >= 0 && i < size; i++, j--) {
-            if (board[i][j] == 1) {
+        for (int i = row, j = col; i < size && j >= 0; i++, j--)
+            if (board[i][j] == 1)
                 return false;
-            }
-        }
 
         return true;
     }
 
-    private boolean solveNQueens(int col) {
-        if (col >= size) {
-            if (!isDuplicateSolution()) {
-                storeSolution();
-                return true;
-            }
-            return false;
-        }
-
-        for (int i = 0; i < size; i++) {
-            if (!solving) {
-                return false;
-            }
-            if (isSafe(i, col)) {
-                board[i][col] = 1;
-                updateGUI(i, col, true);
-                delay(delay); // Delay to visualize steps
-
-                if (solveNQueens(col + 1)) {
-                    return true;
-                }
-
-                board[i][col] = 0;
-                updateGUI(i, col, false);
-                delay(delay); // Delay to visualize steps
-            }
-        }
-
-        return false;
-    }
-
-    private void storeSolution() {
-        int[][] solution = new int[size][size];
-        for (int i = 0; i < size; i++) {
-            System.arraycopy(board[i], 0, solution[i], 0, size);
-        }
-        solutions.add(solution);
-    }
-
-    private boolean isDuplicateSolution() {
-        for (int[][] solution : solutions) {
-            if (areBoardsEqual(solution, board)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private boolean areBoardsEqual(int[][] board1, int[][] board2) {
-        for (int i = 0; i < size; i++) {
-            for (int j = 0; j < size; j++) {
-                if (board1[i][j] != board2[i][j]) {
-                    return false;
+    private void showSolution(int[][] solution) {
+        clearBoard();
+        for (int row = 0; row < size; row++) {
+            for (int col = 0; col < size; col++) {
+                if (solution[row][col] == 1) {
+                    board[row][col] = 1;
+                    updateGUI(row, col, true);
                 }
             }
         }
-        return true;
+    }
+
+    private void clearBoard() {
+        for (int row = 0; row < size; row++) {
+            for (int col = 0; col < size; col++) {
+                board[row][col] = 0;
+                cells[row][col].setText("");
+                cells[row][col].setBackground((row + col) % 2 == 0 ? Color.WHITE : Color.BLACK);
+                cells[row][col].setForeground((row + col) % 2 == 0 ? Color.BLACK : Color.WHITE);
+            }
+        }
     }
 
     private void updateGUI(int row, int col, boolean placeQueen) {
-        SwingUtilities.invokeLater(new Runnable() {
-            @Override
-            public void run() {
-                if (placeQueen) {
-                    cells[row][col].setText("Q");
-                    cells[row][col].setBackground(Color.ORANGE);
-                    cells[row][col].setForeground(Color.BLACK);
-                } else {
-                    cells[row][col].setText("");
-                    cells[row][col].setBackground((row + col) % 2 == 0 ? Color.WHITE : Color.BLACK);
-                    cells[row][col].setForeground((row + col) % 2 == 0 ? Color.BLACK : Color.WHITE);
-                }
+        SwingUtilities.invokeLater(() -> {
+            if (placeQueen) {
+                cells[row][col].setText("Q");
+                cells[row][col].setBackground(Color.ORANGE);
+                cells[row][col].setForeground(Color.BLACK);
+            } else {
+                cells[row][col].setText("");
+                cells[row][col].setBackground((row + col) % 2 == 0 ? Color.WHITE : Color.BLACK);
+                cells[row][col].setForeground((row + col) % 2 == 0 ? Color.BLACK : Color.WHITE);
             }
         });
     }
@@ -252,12 +207,9 @@ public class NQueensVisualizer extends JFrame {
     }
 
     public static void main(String[] args) {
-        SwingUtilities.invokeLater(new Runnable() {
-            @Override
-            public void run() {
-                NQueensVisualizer visualizer = new NQueensVisualizer();
-                visualizer.setVisible(true);
-            }
+        SwingUtilities.invokeLater(() -> {
+            NQueensVisualizer visualizer = new NQueensVisualizer();
+            visualizer.setVisible(true);
         });
     }
 }
